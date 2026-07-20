@@ -1,0 +1,17 @@
+{
+  "name": "cursormobileaccess",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build:web": "npm run build -w @cursormobileaccess/protocol && npm run build -w @cursormobileaccess/web",
+    "bridge": "npm run build:web && npm run start -w @cursormobileaccess/bridge",
+    "bridge:dev": "npm run dev -w @cursormobileaccess/bridge",
+    "typecheck": "npm run typecheck -w @cursormobileaccess/protocol && npm run typecheck -w @cursormobileaccess/bridge"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

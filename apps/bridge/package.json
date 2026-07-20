@@ -1,0 +1,25 @@
+{
+  "name": "@cursormobileaccess/bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "dump-dom": "tsx src/scripts/dump-dom.ts",
+    "probe-dom": "tsx src/scripts/probe-dom.ts",
+    "verify-extract": "tsx src/scripts/verify-extract.ts",
+    "smoke-ws": "tsx src/scripts/smoke-ws.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@cursormobileaccess/protocol": "*",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  }
+}

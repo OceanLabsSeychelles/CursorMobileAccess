@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.expo/
+*.log
+.env
+.env.*
+!.env.example
+infra/ntfy/.env
+apps/mobile/.expo/
+apps/mobile/dist/
+*.tsbuildinfo
+.DS_Store
+infra/ntfy/topic.txt
+tmp-*.json
+tmp-*.png

@@ -1,0 +1,31 @@
+services:
+  ntfy:
+    image: binwiederhier/ntfy:latest
+    container_name: cursormobile-ntfy
+    restart: unless-stopped
+    command: serve
+    ports:
+      # Host port 2586 → container 80 (avoid clashing with common HTTP)
+      - "2586:80"
+    environment:
+      # Set in infra/ntfy/.env — see .env.example
+      NTFY_BASE_URL: ${NTFY_BASE_URL:-http://127.0.0.1:2586}
+      NTFY_CACHE_FILE: /var/cache/ntfy/cache.db
+      NTFY_ATTACHMENT_CACHE_DIR: /var/cache/ntfy/attachments
+      # Private Tailscale network — topic secrecy is the main gate
+      NTFY_ENABLE_LOGIN: "false"
+    volumes:
+      - ntfy-cache:/var/cache/ntfy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q --tries=1 http://localhost:80/v1/health -O - | grep -Eo '\"healthy\"\\s*:\\s*true' || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  ntfy-cache:

@@ -17,6 +17,11 @@ export class CdpClient {
 
   constructor(private readonly wsUrl: string) {}
 
+  /** True when the underlying WebSocket is open. */
+  isConnected(): boolean {
+    return this.ws != null && this.ws.readyState === WebSocket.OPEN;
+  }
+
   async connect(): Promise<void> {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
 

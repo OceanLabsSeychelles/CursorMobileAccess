@@ -2,7 +2,7 @@
 
 Semantic contract between the PC **bridge** and the **web client** (phone browser).
 
-The phone never sees Cursor DOM, CSS selectors, or CDP details. The bridge maps IDE UI → this model and maps client intents → CDP actions.
+The phone never sees Cursor DOM, CSS selectors, or CDP details. The bridge maps IDE UI → this model and maps client intents → CDP actions. Clients: **web UI** and **Android app** (`apps/android`).
 
 ## Design principles
 
@@ -87,6 +87,7 @@ Action {
 | `send_message` | `text` |
 | `invoke_action` | `actionId` |
 | `fill_freeform` | `text` — Other answer text before Continue |
+| `attach_files` | `files: [{ name, mime, dataBase64 }]`, optional `text`, optional `submit` (default true) |
 | `select_window` | `windowId` |
 | `select_tab` | `tabId` |
 | `new_chat` | — |

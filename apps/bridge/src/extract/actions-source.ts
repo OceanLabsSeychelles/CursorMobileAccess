@@ -119,6 +119,47 @@ export const EXTRACT_ACTIONS_SOURCE = `(() => {
     );
   }
 
+  /** Plan Build/View Plan buttons linger in transcript DOM after the step completes. */
+  function isPendingPlanAction(el) {
+    if (isPermissionChrome(el)) return true;
+    if (
+      el.closest(
+        ".glass-questionnaire-tray, [class*='glass-questionnaire-tray'], .ui-prompt-input-header-tray"
+      )
+    ) {
+      return visible(el);
+    }
+    var row = el.closest("[data-react-transcript-row-kind]");
+    if (!row) return visible(el);
+    var rowKind = row.getAttribute("data-react-transcript-row-kind") || "";
+    if (
+      rowKind !== "toolPlaceholder" &&
+      rowKind !== "activityGroup" &&
+      rowKind !== "activity"
+    ) {
+      return false;
+    }
+    var plane =
+      document.querySelector(
+        ".virtualized-composer-messages-virtual-plane, .composer-messages-container, .agent-panel-conversation-shell"
+      ) || document.body;
+    var rows = plane.querySelectorAll("[data-react-transcript-row-kind]");
+    if (!rows.length) return false;
+    var last = rows[rows.length - 1];
+    var prev = rows.length > 1 ? rows[rows.length - 2] : null;
+    if (row === last) return true;
+    // tailStatus often follows the pending tool row
+    if (
+      prev &&
+      row === prev &&
+      last &&
+      last.getAttribute("data-react-transcript-row-kind") === "tailStatus"
+    ) {
+      return true;
+    }
+    return false;
+  }
+
   var actions = [];
   var seen = Object.create(null);
 
@@ -179,7 +220,15 @@ export const EXTRACT_ACTIONS_SOURCE = `(() => {
     var baria = bel.getAttribute("aria-label");
     var bcls = bel.className && bel.className.toString ? bel.className.toString() : "";
     var c = classify(btext, baria, bcls);
-    if (c) push(c.kind, c.label, bel);
+    if (c) {
+      if (
+        (c.kind === "build" || c.kind === "view_plan") &&
+        !isPendingPlanAction(bel)
+      ) {
+        continue;
+      }
+      push(c.kind, c.label, bel);
+    }
   }
 
   var buttons = document.querySelectorAll("button, [role='button']");
@@ -201,6 +250,12 @@ export const EXTRACT_ACTIONS_SOURCE = `(() => {
     var norm = normalizeActionLabel(text || aria);
     var hit = classify(text, aria, cls);
     if (!hit) continue;
+    if (
+      (hit.kind === "build" || hit.kind === "view_plan") &&
+      !isPendingPlanAction(el)
+    ) {
+      continue;
+    }
     var shellAction =
       hit.kind === "run" ||
       hit.kind === "skip" ||

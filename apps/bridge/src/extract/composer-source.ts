@@ -232,6 +232,37 @@ export const EXTRACT_COMPOSER_UI_SOURCE = `(() => {
       return (text || "").trim().split("\\n")[0].trim();
     }
 
+    function resolveChatTitle(el) {
+      if (!el) return "";
+      return chatTitleFromText(
+        el.innerText ||
+          el.getAttribute("aria-label") ||
+          el.getAttribute("title") ||
+          ""
+      );
+    }
+
+    function pushTab(id, title, active) {
+      var clean = chatTitleFromText(title);
+      if (!clean) return;
+      var key = clean.toLowerCase();
+      if (seenTabTitles[key]) {
+        // Prefer marking existing entry active if this node is active
+        if (active) {
+          for (var i = 0; i < tabs.length; i++) {
+            if (tabs[i].title.toLowerCase() === key) tabs[i].active = true;
+          }
+        }
+        return;
+      }
+      seenTabTitles[key] = true;
+      tabs.push({
+        id: id || "chat-" + encodeURIComponent(clean).slice(0, 80),
+        title: clean.slice(0, 80),
+        active: !!active,
+      });
+    }
+
     function isAgentChatButton(el) {
       if (!el) return false;
       // Cursor Agents sidebar uses div[role=button], not <button>
@@ -242,10 +273,10 @@ export const EXTRACT_COMPOSER_UI_SOURCE = `(() => {
       var cls = el.className && el.className.toString ? el.className.toString() : "";
       if (/ui-sidebar-section-head/.test(cls)) return false;
       if (el.getAttribute("data-action-id")) return false;
-      var title = chatTitleFromText(el.innerText || el.getAttribute("aria-label") || "");
+      var title = resolveChatTitle(el);
       if (!title) return false;
       if (/^(new agent|search|automations|customize|more|pinned)$/i.test(title)) return false;
-      if (/pro plan/i.test(el.innerText || "")) return false;
+      if (/pro plan/i.test(el.innerText || el.getAttribute("aria-label") || "")) return false;
       return true;
     }
 
@@ -256,47 +287,43 @@ export const EXTRACT_COMPOSER_UI_SOURCE = `(() => {
     for (var s = 0; s < sidebarChats.length; s++) {
       var cell = sidebarChats[s];
       if (!isAgentChatButton(cell)) continue;
-      var tabTitle = chatTitleFromText(cell.innerText || "");
-      if (seenTabTitles[tabTitle.toLowerCase()]) continue;
-      seenTabTitles[tabTitle.toLowerCase()] = true;
+      var tabTitle = resolveChatTitle(cell);
       var active =
         cell.getAttribute("data-active") === "true" ||
         cell.getAttribute("aria-current") === "page" ||
         cell.getAttribute("aria-selected") === "true";
-      tabs.push({
-        id: "chat-" + encodeURIComponent(tabTitle).slice(0, 80),
-        title: tabTitle.slice(0, 80),
-        active: active,
-      });
+      pushTab(
+        "chat-" + encodeURIComponent(tabTitle).slice(0, 80),
+        tabTitle,
+        active
+      );
     }
 
-    // Fallback: top chat title tabs if sidebar empty
-    if (!tabs.length) {
-      var tabEls = Array.prototype.slice.call(
-        document.querySelectorAll(
-          ".chat-title-tab-row [role='tab'], .chat-title-tab-tray-root button, .agent-sidebar-cell, [class*='agent-sidebar-cell']"
-        )
+    // Also merge top chat title tray / alt sidebar cells (helps when Agents
+    // list is virtualized, collapsed, or briefly unmounted).
+    var tabEls = Array.prototype.slice.call(
+      document.querySelectorAll(
+        ".chat-title-tab-row [role='tab'], .chat-title-tab-tray-root button, .agent-sidebar-cell, [class*='agent-sidebar-cell'], [class*='chat-title-tab']"
+      )
+    );
+    for (var t = 0; t < tabEls.length; t++) {
+      var tcell = tabEls[t];
+      var tTitle = resolveChatTitle(tcell);
+      if (!tTitle || /^(new agent|search|automations|customize|more|pinned)$/i.test(tTitle)) continue;
+      if (/ctrl\\+/i.test(tTitle)) continue;
+      // Chrome labels from the title tray, not real chats
+      if (/^chat titles?\\.?$/i.test(tTitle)) continue;
+      var tcls = tcell.className && tcell.className.toString ? tcell.className.toString() : "";
+      var tactive =
+        tcell.getAttribute("aria-selected") === "true" ||
+        tcell.getAttribute("data-active") === "true" ||
+        tcell.getAttribute("data-selected") === "true" ||
+        /(?:^|\\s)(?:selected|is-selected)(?:\\s|$)/i.test(tcls);
+      pushTab(
+        "chat-" + encodeURIComponent(tTitle).slice(0, 80),
+        tTitle,
+        tactive
       );
-      for (var t = 0; t < tabEls.length; t++) {
-        var tcell = tabEls[t];
-        var tTitle =
-          tcell.getAttribute("aria-label") ||
-          tcell.getAttribute("title") ||
-          chatTitleFromText(tcell.innerText || "") ||
-          "Chat " + (t + 1);
-        if (!tTitle || /new agent|search|ctrl\\+/i.test(tTitle)) continue;
-        var tcls = tcell.className && tcell.className.toString ? tcell.className.toString() : "";
-        var tactive =
-          tcell.getAttribute("aria-selected") === "true" ||
-          tcell.getAttribute("data-active") === "true" ||
-          tcell.getAttribute("data-selected") === "true" ||
-          /(?:^|\\s)(?:selected|is-selected)(?:\\s|$)/i.test(tcls);
-        tabs.push({
-          id: "tab-" + t + "-" + String(tTitle).slice(0, 40),
-          title: String(tTitle).trim().slice(0, 80),
-          active: tactive,
-        });
-      }
     }
 
     if (tabs.length) {

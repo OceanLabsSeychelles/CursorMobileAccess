@@ -131,10 +131,28 @@ export type SessionPatch = {
   [K in keyof SessionSnapshot]?: SessionSnapshot[K];
 };
 
+/** One attachment (image/doc) sent as base64 for the PC composer file input. */
+export interface AttachFile {
+  /** Filename including extension, e.g. photo.jpg */
+  name: string;
+  /** MIME type, e.g. image/jpeg */
+  mime: string;
+  /** Raw file bytes, base64 (no data: URL prefix) */
+  dataBase64: string;
+}
+
 export type CommandPayload =
   | { op: "send_message"; text: string }
   | { op: "invoke_action"; actionId: string }
   | { op: "fill_freeform"; text: string }
+  | {
+      op: "attach_files";
+      files: AttachFile[];
+      /** Optional caption typed into the composer after attach */
+      text?: string;
+      /** If true (default), click Send/Queue after attach (+ text) */
+      submit?: boolean;
+    }
   | { op: "select_window"; windowId: string }
   | { op: "select_tab"; tabId: string }
   | { op: "new_chat" }

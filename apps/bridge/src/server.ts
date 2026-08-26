@@ -191,7 +191,8 @@ export function startBridgeServer(config: BridgeConfig): http.Server {
       }
 
       if (msg.type === "command") {
-        if (msg.op === "select_window") {
+        try {
+          if (msg.op === "select_window") {
           preferredWindowId = msg.windowId;
           await publish();
           send(ws, {
@@ -275,12 +276,43 @@ export function startBridgeServer(config: BridgeConfig): http.Server {
           return;
         }
 
+        if (msg.op === "attach_files") {
+          const result = await monitor.attachFiles(
+            msg.files,
+            { text: msg.text, submit: msg.submit },
+            preferredWindowId,
+          );
+          send(ws, {
+            type: "command_result",
+            commandId: msg.commandId,
+            ok: result.ok,
+            error: result.error,
+          });
+          if (result.ok) {
+            setTimeout(() => {
+              void publish();
+            }, 600);
+          }
+          return;
+        }
+
         send(ws, {
           type: "command_result",
           commandId: msg.commandId,
           ok: false,
           error: `Command '${msg.op}' not implemented yet`,
         });
+        } catch (err) {
+          console.warn(
+            `[bridge] command ${msg.op} failed: ${(err as Error).message}`,
+          );
+          send(ws, {
+            type: "command_result",
+            commandId: msg.commandId,
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
     });
   });
@@ -311,6 +343,32 @@ export function startBridgeServer(config: BridgeConfig): http.Server {
       `[bridge] http://${config.bindHost}:${config.bindPort}  (UI + WS, CDP ${config.cdpHttpUrl})`,
     );
     console.log(`[bridge] web root: ${config.webRoot}`);
+  });
+
+  httpServer.on("error", (err: NodeJS.ErrnoException) => {
+    console.error(
+      `[bridge] listen failed on ${config.bindHost}:${config.bindPort}: ${err.message}`,
+    );
+    if (err.code === "EADDRNOTAVAIL") {
+      console.error(
+        "[bridge] Bind address unavailable (Tailscale down?). Set BRIDGE_HOST=0.0.0.0 or fix Tailscale, then restart.",
+      );
+    }
+    process.exit(1);
+  });
+
+  const shutdown = (signal: string) => {
+    console.log(`[bridge] ${signal} — closing`);
+    httpServer.close(() => process.exit(0));
+    setTimeout(() => process.exit(0), 3_000).unref();
+  };
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("uncaughtException", (err) => {
+    console.error("[bridge] uncaughtException:", err);
+  });
+  process.on("unhandledRejection", (reason) => {
+    console.error("[bridge] unhandledRejection:", reason);
   });
 
   return httpServer;

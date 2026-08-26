@@ -22,33 +22,34 @@ Wire format: [docs/PROTOCOL.md](docs/PROTOCOL.md). Full setup: [docs/SETUP.md](d
 | `packages/protocol` | Shared TypeScript wire types |
 | `apps/bridge` | CDP client, extractors, HTTP/WS server, ntfy |
 | `apps/web` | Vite React phone UI (built into `apps/web/dist`) |
+| `apps/android` | Kotlin / Compose app — same protocol as the web UI |
 | `infra/ntfy` | Optional self-hosted ntfy (Docker) |
-| `scripts/` | Helper scripts (e.g. launch Cursor with CDP) |
+| `scripts/` | Start-all / CDP / Windows logon helpers |
 
 ## Quick start
 
 **Prerequisites:** Node 20+, Tailscale, Docker (optional, for ntfy).
 
-1. **Cursor with CDP** — fully quit Cursor first (single-instance), then:
+1. **Configure once** — copy `.env.example` → `.env` (gitignored), set a strong `BRIDGE_AUTH_TOKEN` and your Tailscale `BRIDGE_HOST`. Run `npm install`.
+
+2. **Start everything** (ntfy + Cursor with CDP + bridge):
 
    ```powershell
-   .\scripts\start-cursor-cdp.ps1
+   .\scripts\start-all.cmd -ForceCursor
    ```
 
-   Verify: [http://127.0.0.1:9222/json](http://127.0.0.1:9222/json)
+   (Use the `.cmd` wrapper if PowerShell reports “not digitally signed” — machine policy `AllSigned`.)
 
-2. **Configure** — copy `.env.example` → `.env` (gitignored), set a strong `BRIDGE_AUTH_TOKEN` and your Tailscale `BRIDGE_HOST`.
-
-3. **Run bridge** (builds web UI, serves on one port):
+   After a reboot, register logon start + a keep-alive watchdog:
 
    ```powershell
-   npm install
-   npm run bridge
+   .\scripts\install-startup.cmd
+   .\scripts\install-bridge-watchdog.cmd
    ```
 
-4. **Phone** — open `http://<your-tailscale-ip>:8787`, enter the auth token, keep **Agents Window** focused on the chat you want to mirror.
+3. **Phone** — browser: `http://<your-tailscale-ip>:8787`, or the Android app in `apps/android` (host + auth token). Keep **Agents Window** focused on the chat you want to mirror.
 
-See [docs/SETUP.md](docs/SETUP.md) for ntfy, chat switching, permissions, and troubleshooting.
+See [docs/SETUP.md](docs/SETUP.md) for first-time setup, ntfy, permissions, and troubleshooting.
 
 ## Features
 
@@ -61,6 +62,7 @@ See [docs/SETUP.md](docs/SETUP.md) for ntfy, chat switching, permissions, and tr
 | Switch agent chats (`select_tab`) | ✅ |
 | ntfy push + tap-to-open web UI | ✅ |
 | Auth token (required on WebSocket) | ✅ |
+| Android app (Kotlin / Compose) | ✅ |
 
 ## Security notes
 

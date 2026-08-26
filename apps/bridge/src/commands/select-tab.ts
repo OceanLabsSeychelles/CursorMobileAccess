@@ -9,7 +9,12 @@ export async function selectAgentChat(
   title: string,
 ): Promise<CommandResult> {
   const trimmed = title.trim();
-  if (!trimmed) return { ok: false, error: "Empty chat title" };
+  if (!trimmed) {
+    return {
+      ok: false,
+      error: "Chat title missing — reopen the Agents sidebar in Cursor",
+    };
+  }
 
   await client.bringToFront();
 
@@ -33,8 +38,11 @@ export async function selectAgentChat(
         el.dispatchEvent(new MouseEvent("click", opts));
         if (typeof el.click === "function") el.click();
       }
-      function chatTitle(text) {
-        return (text || "").trim().split("\\n")[0].trim();
+      function chatTitle(el) {
+        return ((el && (el.innerText || el.getAttribute("aria-label") || el.getAttribute("title"))) || "")
+          .trim()
+          .split("\\n")[0]
+          .trim();
       }
       function isAgentChat(el) {
         if (!el) return false;
@@ -45,10 +53,10 @@ export async function selectAgentChat(
         var cls = el.className && el.className.toString ? el.className.toString() : "";
         if (/ui-sidebar-section-head/.test(cls)) return false;
         if (el.getAttribute("data-action-id")) return false;
-        var title = chatTitle(el.innerText || "");
+        var title = chatTitle(el);
         if (!title) return false;
         if (/^(new agent|search|automations|customize|more|pinned)$/i.test(title)) return false;
-        if (/pro plan/i.test(el.innerText || "")) return false;
+        if (/pro plan/i.test(el.innerText || el.getAttribute("aria-label") || "")) return false;
         return true;
       }
 
@@ -57,7 +65,7 @@ export async function selectAgentChat(
       for (var i = 0; i < nodes.length; i++) {
         var el = nodes[i];
         if (!isAgentChat(el)) continue;
-        var t = chatTitle(el.innerText || "");
+        var t = chatTitle(el);
         if (t.toLowerCase() === want) {
           match = el;
           break;
@@ -68,14 +76,23 @@ export async function selectAgentChat(
         for (var j = 0; j < nodes.length; j++) {
           var el2 = nodes[j];
           if (!isAgentChat(el2)) continue;
-          var t2 = chatTitle(el2.innerText || "");
+          var t2 = chatTitle(el2);
           if (t2.toLowerCase().indexOf(want) === 0 || want.indexOf(t2.toLowerCase()) === 0) {
             match = el2;
             break;
           }
         }
       }
-      if (!match) return { ok: false, error: "Chat not found in Agents sidebar: " + want };
+      if (!match) {
+        // Try showing the Agents sidebar if it was collapsed
+        var show = document.querySelector(
+          "[aria-label='Show Sidebar'], [aria-label='Show Agents'], [aria-label*='Agents' i][aria-label*='Show' i]"
+        );
+        if (show && typeof show.click === "function") {
+          try { show.click(); } catch (e) {}
+        }
+        return { ok: false, error: "Chat not found in Agents sidebar: " + want };
+      }
       if (!visible(match)) match.scrollIntoView({ block: "center" });
       fireClick(match);
       return { ok: true };

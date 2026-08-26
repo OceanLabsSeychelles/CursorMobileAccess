@@ -8,23 +8,11 @@ Install [Tailscale](https://tailscale.com/) on the PC and phone. Note the PC’s
 
 The bridge will bind to the Tailscale IP so the phone can reach it without opening ports on your router.
 
-## 2. Cursor with CDP
-
-Cursor must be launched with remote debugging. **Fully exit Cursor first** — a second launch with flags is ignored while an instance is running.
-
-```powershell
-cd C:\path\to\CursorMobileAccess
-.\scripts\start-cursor-cdp.ps1
-```
-
-Confirm CDP is up: open [http://127.0.0.1:9222/json](http://127.0.0.1:9222/json). You should see a `page` target titled **Cursor Agents**.
-
-Open the **Agents Window** and the chat you want to control from the phone.
-
-## 3. Bridge configuration
+## 2. Bridge configuration (once)
 
 ```powershell
 Copy-Item .env.example .env
+npm install
 ```
 
 Edit `.env` (this file is gitignored):
@@ -44,20 +32,70 @@ Generate a token (PowerShell):
 [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }) -as [byte[]])
 ```
 
-## 4. Run the bridge
+## 3. Start everything (daily / after reboot)
+
+One script starts optional ntfy, Cursor with CDP, and the bridge console:
 
 ```powershell
-npm install
-npm run bridge
+cd C:\path\to\CursorMobileAccess
+.\scripts\start-all.cmd -ForceCursor
 ```
 
-This builds `apps/web` and starts the bridge. Logs should show CDP connected and the bind URL.
+Use the `.cmd` wrapper (not `.ps1`) when PowerShell says the script is not digitally signed — this machine’s policy is `AllSigned`. The `.cmd` files start PowerShell with `-ExecutionPolicy Bypass` for these scripts only.
+
+`-ForceCursor` quits a Cursor instance that was restored **without** CDP (common after reboot) and relaunches with `--remote-debugging-port=9222`.
+
+Confirm CDP: [http://127.0.0.1:9222/json](http://127.0.0.1:9222/json) — you should see a `page` target titled **Cursor Agents**. Open the **Agents Window** and focus the chat you want on the phone.
+
+### Auto-start at Windows logon
+
+```powershell
+.\scripts\install-startup.cmd
+```
+
+This registers a scheduled task that waits briefly (Docker/Tailscale), then runs `start-all.ps1 -ForceCursor` with Bypass. Remove with `.\scripts\uninstall-startup.cmd`.
+
+Also enable **Docker Desktop → Start when you log in** if you use ntfy.
+
+### Keep the bridge alive (recommended)
+
+Logon start alone is not enough — if the bridge process exits later (Cursor restart, agent terminal cleanup, Tailscale flap), nothing brings it back.
+
+```powershell
+.\scripts\install-bridge-watchdog.cmd
+```
+
+Registers **CursorMobileAccessBridgeWatchdog**, which every 2 minutes checks `http://BRIDGE_HOST:PORT/` and restarts the bridge if it is down (via a silent VBScript launcher so it does not flash a console). Remove with `.\scripts\uninstall-bridge-watchdog.cmd`.
+
+Prefer starting the bridge via `.\scripts\start-all.cmd` or the watchdog (hidden process + `logs/bridge.log`), **not** from a Cursor agent terminal — those sessions can be killed when Cursor restarts.
+
+### Manual pieces (if you prefer)
+
+```powershell
+.\scripts\start-cursor-cdp.cmd -Force   # Cursor only
+npm run bridge                          # bridge only (foreground)
+```
+
+## 4. Phone
+
+### Browser
 
 On the phone, open:
 
 `http://<BRIDGE_HOST>:8787`
 
 Enter the same `BRIDGE_AUTH_TOKEN`. The token is stored in browser local storage.
+
+### Android app
+
+Native client with the same protocol as the web UI (`apps/android`). Build and install:
+
+```powershell
+cd apps\android
+.\gradlew.bat installDebug
+```
+
+In the app, enter the bridge host (`<BRIDGE_HOST>:8787` or MagicDNS) and the same auth token. See [apps/android/README.md](../apps/android/README.md).
 
 ### What you should see
 
@@ -95,7 +133,9 @@ If chips are missing but you see Skip/Run as plain timeline text, hard-refresh t
 
 | Symptom | Check |
 | --- | --- |
-| `CDP not connected` | Cursor running with `--remote-debugging-port=9222`? `/json` reachable? |
+| `CDP not connected` | Cursor running with `--remote-debugging-port=9222`? `/json` reachable? Try `.\scripts\start-cursor-cdp.cmd -Force` |
+| Script not digitally signed | Use `.\scripts\start-all.cmd` (Bypass for these scripts only), or set CurrentUser policy to RemoteSigned |
+| Startup after reboot incomplete | Docker Desktop set to start at login? Wait for the scheduled task delay; re-run `.\scripts\start-all.cmd -ForceCursor` |
 | Wrong chat on phone | Focus the desired chat in Agents; use tab chips to switch |
 | `Invalid token` | `.env` token matches phone; bridge restarted after `.env` change |
 | No action chips | Permission bar must be open in Agents; not just text pasted in chat history |

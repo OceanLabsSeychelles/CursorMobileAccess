@@ -9,7 +9,11 @@ infra/ntfy/.env
 apps/mobile/.expo/
 apps/mobile/dist/
 *.tsbuildinfo
-.DS_Store
+.idea/
+apps/android/.gradle/
+apps/android/build/
+apps/android/app/build/
+apps/android/local.properties
 infra/ntfy/topic.txt
 tmp-*.json
 tmp-*.png

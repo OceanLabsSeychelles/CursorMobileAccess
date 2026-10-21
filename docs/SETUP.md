@@ -69,6 +69,10 @@ Registers **CursorMobileAccessBridgeWatchdog**, which every 2 minutes checks `ht
 
 Prefer starting the bridge via `.\scripts\start-all.cmd` or the watchdog (hidden process + `logs/bridge.log`), **not** from a Cursor agent terminal — those sessions can be killed when Cursor restarts.
 
+### Agents “More” overflow
+
+The bridge may expand Cursor’s Agents sidebar **More** control occasionally (about every 10 minutes, or once when you switch to a chat that isn’t visible yet) so overflow chats appear on the phone. It **does not collapse** More afterward, so it won’t flap the sidebar while you work in Cursor.
+
 ### Manual pieces (if you prefer)
 
 ```powershell

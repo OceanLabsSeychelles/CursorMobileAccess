@@ -265,9 +265,12 @@ export const EXTRACT_COMPOSER_UI_SOURCE = `(() => {
 
     function isAgentChatButton(el) {
       if (!el) return false;
-      // Cursor Agents sidebar uses div[role=button], not <button>
+      // Cursor Agents sidebar: historically div[role=button]; newer builds
+      // keep data-sidebar-menu-button on a plain DIV with no role.
       var isBtn =
-        el.tagName === "BUTTON" || el.getAttribute("role") === "button";
+        el.tagName === "BUTTON" ||
+        el.getAttribute("role") === "button" ||
+        el.getAttribute("data-sidebar-menu-button") != null;
       if (!isBtn) return false;
       if (el.getAttribute("data-sidebar-menu-button") == null) return false;
       var cls = el.className && el.className.toString ? el.className.toString() : "";
@@ -275,7 +278,7 @@ export const EXTRACT_COMPOSER_UI_SOURCE = `(() => {
       if (el.getAttribute("data-action-id")) return false;
       var title = resolveChatTitle(el);
       if (!title) return false;
-      if (/^(new agent|search|automations|customize|more|pinned)$/i.test(title)) return false;
+      if (/^(new agent|new chat|search|automations|customize|more|pinned|history)$/i.test(title)) return false;
       if (/pro plan/i.test(el.innerText || el.getAttribute("aria-label") || "")) return false;
       return true;
     }
@@ -309,7 +312,7 @@ export const EXTRACT_COMPOSER_UI_SOURCE = `(() => {
     for (var t = 0; t < tabEls.length; t++) {
       var tcell = tabEls[t];
       var tTitle = resolveChatTitle(tcell);
-      if (!tTitle || /^(new agent|search|automations|customize|more|pinned)$/i.test(tTitle)) continue;
+      if (!tTitle || /^(new agent|new chat|search|automations|customize|more|pinned|history)$/i.test(tTitle)) continue;
       if (/ctrl\\+/i.test(tTitle)) continue;
       // Chrome labels from the title tray, not real chats
       if (/^chat titles?\\.?$/i.test(tTitle)) continue;
@@ -330,6 +333,21 @@ export const EXTRACT_COMPOSER_UI_SOURCE = `(() => {
       var anyActive = false;
       for (var a = 0; a < tabs.length; a++) if (tabs[a].active) anyActive = true;
       if (!anyActive) tabs[0].active = true;
+    }
+
+    var hasMoreOverflow = false;
+    for (var mi = 0; mi < sidebarChats.length; mi++) {
+      var moreCell = sidebarChats[mi];
+      var moreTitle = resolveChatTitle(moreCell);
+      if (!/^more$/i.test(moreTitle)) continue;
+      var moreRect = moreCell.getBoundingClientRect ? moreCell.getBoundingClientRect() : null;
+      if (moreRect && moreRect.width > 8 && moreRect.height > 8) {
+        hasMoreOverflow = true;
+        break;
+      }
+      // Still count a More control even if geometry is odd
+      hasMoreOverflow = true;
+      break;
     }
 
     var modeEl = document.querySelector(
@@ -422,6 +440,7 @@ export const EXTRACT_COMPOSER_UI_SOURCE = `(() => {
       tabs: tabs,
       timeline: timeline,
       awaiting: awaitingHuman,
+      hasMoreOverflow: hasMoreOverflow,
     };
   } catch (err) {
     return {
@@ -431,6 +450,7 @@ export const EXTRACT_COMPOSER_UI_SOURCE = `(() => {
       tabs: [],
       timeline: [],
       awaiting: false,
+      hasMoreOverflow: false,
     };
   }
 })()`;

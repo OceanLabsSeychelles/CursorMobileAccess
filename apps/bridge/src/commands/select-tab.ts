@@ -47,7 +47,9 @@ export async function selectAgentChat(
       function isAgentChat(el) {
         if (!el) return false;
         var isBtn =
-          el.tagName === "BUTTON" || el.getAttribute("role") === "button";
+          el.tagName === "BUTTON" ||
+          el.getAttribute("role") === "button" ||
+          el.getAttribute("data-sidebar-menu-button") != null;
         if (!isBtn) return false;
         if (el.getAttribute("data-sidebar-menu-button") == null) return false;
         var cls = el.className && el.className.toString ? el.className.toString() : "";
@@ -55,7 +57,7 @@ export async function selectAgentChat(
         if (el.getAttribute("data-action-id")) return false;
         var title = chatTitle(el);
         if (!title) return false;
-        if (/^(new agent|search|automations|customize|more|pinned)$/i.test(title)) return false;
+        if (/^(new agent|new chat|search|automations|customize|more|pinned|history)$/i.test(title)) return false;
         if (/pro plan/i.test(el.innerText || el.getAttribute("aria-label") || "")) return false;
         return true;
       }

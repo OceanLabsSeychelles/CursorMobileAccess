@@ -46,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -230,6 +231,12 @@ fun SessionScreen(
                             },
                         placeholder = { Text("Type here, then tap Continue…") },
                         minLines = 3,
+                        maxLines = 8,
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Sentences,
+                            // None → IME shows Return and inserts \\n (Default can become Send/Done).
+                            imeAction = ImeAction.None,
+                        ),
                         colors = composerFieldColors(),
                     )
                     Button(
@@ -306,9 +313,13 @@ fun SessionScreen(
                         )
                     },
                     minLines = 2,
-                    maxLines = 5,
+                    maxLines = 8,
                     enabled = !attaching,
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Sentences,
+                        // None → IME shows Return and inserts \n (Default can become Send/Done).
+                        imeAction = ImeAction.None,
+                    ),
                     colors = composerFieldColors(),
                 )
             }

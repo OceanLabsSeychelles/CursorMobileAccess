@@ -147,7 +147,11 @@ object BridgeHub {
             }
             is ServerMessage.Attention -> {
                 publish(state.copy(attention = "${msg.title}: ${msg.body}"))
-                notifier?.alert(msg.title, msg.body)
+                // Only buzz for things that need the user. Errors / disconnects /
+                // idle are shown in-app (and on the quiet status notification).
+                if (msg.reason == "awaiting_input") {
+                    notifier?.alert(msg.title, msg.body)
+                }
             }
         }
     }

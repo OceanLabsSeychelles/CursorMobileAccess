@@ -66,6 +66,8 @@ See [docs/SETUP.md](docs/SETUP.md) for first-time setup, ntfy, permissions, and 
 
 ## Security notes
 
+See [SECURITY.md](SECURITY.md) for the full policy. In short:
+
 - **Never commit** `.env`, `infra/ntfy/topic.txt`, or `infra/ntfy/.env` — they hold your token and ntfy topic.
 - CDP stays on `127.0.0.1:9222`; only the bridge binds on Tailscale.
 - Replace `dev-change-me` / example tokens before exposing the bridge on Tailscale.
@@ -73,4 +75,5 @@ See [docs/SETUP.md](docs/SETUP.md) for first-time setup, ntfy, permissions, and 
 
 ## License
 
-Private / personal use unless you add a license file.
+[MIT](LICENSE) © 2026 Daniel Hugelmann.
+

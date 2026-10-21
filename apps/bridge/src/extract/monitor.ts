@@ -18,8 +18,13 @@ import {
 } from "../commands/send-message.js";
 import { fillQuestionnaireFreeform } from "../commands/fill-freeform.js";
 import { selectAgentChat } from "../commands/select-tab.js";
+import { expandAgentsMore } from "../commands/expand-agents-more.js";
 import { attachComposerFiles } from "../commands/attach-files.js";
 import { ActionRegistry } from "./action-registry.js";
+
+/** How often we may click Agents "More" during background polling (never collapse). */
+const MORE_EXPAND_COOLDOWN_MS = 10 * 60 * 1000;
+const MAX_REMEMBERED_TABS = 100;
 
 export type PollResult = {
   snapshot: SessionSnapshot;
@@ -39,6 +44,8 @@ export class ComposerMonitor {
   private lastTabs: TabInfo[] = [];
   /** Consecutive polls that returned no usable chat tabs. */
   private tabsEmptyStreak = 0;
+  /** Last time we clicked Agents sidebar "More" (0 = never). */
+  private lastMoreExpandAt = 0;
   private readonly actions = new ActionRegistry();
   /** Serialize CDP use — poll + commands must not overlap. */
   private tail: Promise<unknown> = Promise.resolve();
@@ -134,9 +141,28 @@ export class ComposerMonitor {
         return { snapshot: snap, attention };
       }
 
-      const extracted = await this.client.evaluate<ExtractedUi>(
+      let extracted = await this.client.evaluate<ExtractedUi>(
         EXTRACT_COMPOSER_UI_SOURCE,
       );
+      let expandedMore = false;
+      if (
+        extracted?.ok &&
+        extracted.hasMoreOverflow &&
+        this.shouldExpandMore(extracted.tabs.length)
+      ) {
+        const expand = await expandAgentsMore(this.client);
+        if (expand.clicked) {
+          expandedMore = true;
+          this.lastMoreExpandAt = Date.now();
+          await new Promise((r) => setTimeout(r, 450));
+          extracted = await this.client.evaluate<ExtractedUi>(
+            EXTRACT_COMPOSER_UI_SOURCE,
+          );
+          console.log(
+            `[bridge] expanded Agents "More" — tabs ${extracted?.tabs?.length ?? 0}`,
+          );
+        }
+      }
       const actionList = await this.actions.refresh(this.client);
 
       if (!extracted.ok) {
@@ -151,15 +177,16 @@ export class ComposerMonitor {
           timeline: [],
           actions: actionList,
         };
+        const attention =
+          this.lastPhase !== "error"
+            ? {
+                reason: "error" as const,
+                title: "UI extract failed",
+                body: extracted.reason ?? "Unknown",
+              }
+            : undefined;
         this.lastPhase = "error";
-        return {
-          snapshot: snap,
-          attention: {
-            reason: "error",
-            title: "UI extract failed",
-            body: extracted.reason ?? "Unknown",
-          },
-        };
+        return { snapshot: snap, attention };
       }
 
       let phase = extracted.phase;
@@ -172,7 +199,9 @@ export class ComposerMonitor {
           `${actionList.length} action(s) pending`;
       }
 
-      const tabs = this.mergeTabs(extracted.tabs);
+      const tabs = this.mergeTabs(extracted.tabs, {
+        authoritative: expandedMore,
+      });
 
       const snap: SessionSnapshot = {
         ...base,
@@ -212,6 +241,15 @@ export class ComposerMonitor {
     } catch (err) {
       await this.detach();
       const message = err instanceof Error ? err.message : "poll failed";
+      const attention =
+        this.lastPhase !== "error"
+          ? {
+              reason: "error" as const,
+              title: "CDP error",
+              body: message,
+            }
+          : undefined;
+      this.lastPhase = "error";
       return {
         snapshot: {
           ...base,
@@ -221,11 +259,7 @@ export class ComposerMonitor {
           timeline: [],
           actions: [],
         },
-        attention: {
-          reason: "error",
-          title: "CDP error",
-          body: message,
-        },
+        attention,
       };
     }
   }
@@ -321,31 +355,90 @@ export class ComposerMonitor {
           error: "Chat title missing — reopen the Agents sidebar in Cursor",
         };
       }
-      return selectAgentChat(this.client, title);
+      let result = await selectAgentChat(this.client, title);
+      if (!result.ok) {
+        // Chat may sit behind Agents "More" — expand once (leave open), retry.
+        const expand = await expandAgentsMore(this.client);
+        if (expand.clicked) {
+          this.lastMoreExpandAt = Date.now();
+          await new Promise((r) => setTimeout(r, 450));
+          const extracted = await this.client.evaluate<ExtractedUi>(
+            EXTRACT_COMPOSER_UI_SOURCE,
+          );
+          if (extracted?.ok) {
+            this.mergeTabs(extracted.tabs, { authoritative: true });
+          }
+          result = await selectAgentChat(this.client, title);
+        }
+      }
+      return result;
     });
+  }
+
+  /** Expand More on first sighting or after cooldown — never collapse. */
+  private shouldExpandMore(_extractedTabCount: number): boolean {
+    if (this.lastMoreExpandAt === 0) return true;
+    return Date.now() - this.lastMoreExpandAt >= MORE_EXPAND_COOLDOWN_MS;
   }
 
   /**
    * Keep the last good chat list when Cursor briefly unmounts/collapses the
    * Agents sidebar (otherwise both phone + web hide the switcher).
+   * Union-merge with prior tabs so "More"-overflow chats stay listed between
+   * rare expands. Authoritative refreshes (after expanding More) prune stale names.
    */
-  private mergeTabs(extracted: TabInfo[]): TabInfo[] {
+  private mergeTabs(
+    extracted: TabInfo[],
+    opts: { authoritative?: boolean } = {},
+  ): TabInfo[] {
     const next = extracted.filter((t) => (t.title || "").trim().length > 0);
-    if (next.length > 0) {
+    if (next.length === 0) {
+      this.tabsEmptyStreak += 1;
+      if (this.lastTabs.length > 0 && this.tabsEmptyStreak < 8) {
+        return this.lastTabs.map((t) => ({ ...t }));
+      }
+      if (this.tabsEmptyStreak >= 8) {
+        this.lastTabs = [];
+      }
+      return [];
+    }
+
+    this.tabsEmptyStreak = 0;
+
+    if (opts.authoritative) {
       this.lastTabs = next;
-      this.tabsEmptyStreak = 0;
-      return next;
+      return next.map((t) => ({ ...t }));
     }
-    this.tabsEmptyStreak += 1;
-    // Allow a real empty list only after several consecutive empty polls
-    // (e.g. brand-new window with no chats yet).
-    if (this.lastTabs.length > 0 && this.tabsEmptyStreak < 8) {
-      return this.lastTabs.map((t) => ({ ...t }));
+
+    const byKey = new Map<string, TabInfo>();
+    for (const t of this.lastTabs) {
+      byKey.set(t.title.toLowerCase(), { ...t, active: false });
     }
-    if (this.tabsEmptyStreak >= 8) {
-      this.lastTabs = [];
+    for (const t of next) {
+      byKey.set(t.title.toLowerCase(), { ...t });
     }
-    return [];
+    let merged = [...byKey.values()];
+    if (merged.length > MAX_REMEMBERED_TABS) {
+      // Prefer tabs seen in this extract, then fill from memory
+      const freshKeys = new Set(next.map((t) => t.title.toLowerCase()));
+      const fresh = merged.filter((t) => freshKeys.has(t.title.toLowerCase()));
+      const remembered = merged.filter(
+        (t) => !freshKeys.has(t.title.toLowerCase()),
+      );
+      merged = [
+        ...fresh,
+        ...remembered.slice(0, Math.max(0, MAX_REMEMBERED_TABS - fresh.length)),
+      ];
+    }
+    if (!merged.some((t) => t.active) && merged.length > 0) {
+      const prefer = next.find((t) => t.active)?.title.toLowerCase();
+      const hit = prefer
+        ? merged.find((t) => t.title.toLowerCase() === prefer)
+        : undefined;
+      (hit ?? merged[0]!).active = true;
+    }
+    this.lastTabs = merged;
+    return merged.map((t) => ({ ...t }));
   }
 
   getActiveWindowId(): string | null {
